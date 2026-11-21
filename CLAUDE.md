@@ -33,16 +33,16 @@ Before saying a task is done, run `npm run typecheck`, `npm run lint` and `npm t
 ```
 prisma/schema.prisma        # Auth models (Better Auth CLI) + Todo
 prisma.config.ts            # Prisma 7 config: schema path, migrations, DIRECT_URL
-src/app/                    # Routes: (auth)/login, (auth)/signup, todos/, api/auth/[...all]
-src/app/todos/actions.ts    # All todo Server Actions
-src/components/             # auth/ and todos/ UI components
-src/lib/prisma.ts           # PrismaClient singleton (PrismaPg adapter)
-src/lib/auth.ts             # Better Auth server config
-src/lib/auth-client.ts      # Better Auth React client
-src/lib/session.ts          # getUser() / requireUser()
-src/lib/validation.ts       # Zod schemas
-src/generated/prisma/       # Generated Prisma Client — gitignored, never edit
-src/proxy.ts                # Optional cookie-presence redirects only
+app/                        # Routes: (auth)/login, (auth)/signup, todos/, api/auth/[...all]
+app/todos/actions.ts        # All todo Server Actions
+components/                 # auth/ and todos/ UI components
+lib/prisma.ts               # PrismaClient singleton (PrismaPg adapter)
+lib/auth.ts                 # Better Auth server config
+lib/auth-client.ts          # Better Auth React client
+lib/session.ts              # getUser() / requireUser()
+lib/validation.ts           # Zod schemas
+generated/prisma/           # Generated Prisma Client — gitignored, never edit
+proxy.ts                    # Optional cookie-presence redirects only
 ```
 
 ## Rules That Must Not Be Broken
@@ -59,7 +59,7 @@ src/proxy.ts                # Optional cookie-presence redirects only
 Follow the steps in SPEC.md §6 in order: authenticate → validate with Zod → scoped Prisma query → `revalidatePath("/todos")` → return `ActionResult` (`{ ok: true } | { ok: false; error: string }`). Never return raw errors or stack traces to the client; `console.error` them on the server.
 
 ### Prisma 7
-- Generator is `prisma-client` (not `prisma-client-js`) with output `src/generated/prisma`. Import from `@/generated/prisma/client`, never from `@prisma/client`.
+- Generator is `prisma-client` (not `prisma-client-js`) with output `generated/prisma`. Import from `@/generated/prisma/client`, never from `@prisma/client`.
 - `PrismaClient` always gets the `PrismaPg` adapter; use the singleton in `lib/prisma.ts` only — never `new PrismaClient()` elsewhere.
 - The datasource URL lives in `prisma.config.ts` (`DIRECT_URL`), not in `schema.prisma`. The app uses the pooled `DATABASE_URL`.
 - Schema changes: edit `schema.prisma` → `npm run db:migrate -- --name <descriptive_name>` → commit the migration. Never edit a migration that's already committed.
@@ -76,7 +76,7 @@ Follow the steps in SPEC.md §6 in order: authenticate → validate with Zod →
 - Fetch data in Server Components; mutate with Server Actions. Don't add API routes for todos.
 
 ## Next.js 16 Notes
-- Middleware is now `src/proxy.ts` exporting `proxy()` (Node.js runtime). Don't create `middleware.ts`.
+- Middleware is now `proxy.ts` exporting `proxy()` (Node.js runtime). Don't create `middleware.ts`.
 - `params`, `searchParams`, `cookies()` and `headers()` are async — `await` them.
 - `next lint` was removed; use `npm run lint`.
 

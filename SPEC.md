@@ -14,7 +14,7 @@ This is also a learning project, so the stack favors seeing how things work (aut
 
 ### Non-Goals (v1)
 - Social / OAuth login, magic links, 2FA
-- Email verification and password reset (these need an email provider; see §13)
+- Email verification and password reset (these need an email provider; see 13)
 - Sharing todos or collaboration
 - Due dates, reminders, notifications
 - Offline support
@@ -25,7 +25,7 @@ This is also a learning project, so the stack favors seeing how things work (aut
 
 | Concern         | Choice                                                              |
 |-----------------|---------------------------------------------------------------------|
-| Framework       | **Next.js 16** with the **App Router** (`src/app/`)                 |
+| Framework       | **Next.js 16** with the **App Router** (`app/`)                 |
 | Language        | **TypeScript**, `strict: true`                                      |
 | UI              | React 19 (Server Components by default, Client Components where needed) |
 | Styling         | **Tailwind CSS v4**                                                 |
@@ -72,7 +72,9 @@ model Todo {
 
 Add `todos Todo[]` to the generated `User` model.
 
-### 3.3 Validation (Zod, `src/lib/validation.ts`)
+> **Current state (pre-auth):** until Better Auth is added, `Todo` has no `userId` / `user` relation and is indexed on `createdAt` alone. The auth step adds them with a new migration; existing dev todos must then be deleted or backfilled with an owner.
+
+### 3.3 Validation (Zod, `lib/validation.ts`)
 
 ```ts
 export const todoTitleSchema = z
@@ -98,7 +100,7 @@ Sign-up: name 1–100 chars, valid email, password 8–128 chars. The same schem
 
 - Logged-in users visiting `/login` or `/signup` are redirected to `/todos`.
 - Logged-out users visiting `/todos` are redirected to `/login`.
-- `src/proxy.ts` (Next.js 16's replacement for `middleware.ts`) may do a fast **cookie-presence** redirect for UX, but it is **not** the security check. Every page and Server Action that touches user data checks the session on the server itself.
+- `proxy.ts` (Next.js 16's replacement for `middleware.ts`) may do a fast **cookie-presence** redirect for UX, but it is **not** the security check. Every page and Server Action that touches user data checks the session on the server itself.
 
 ---
 
@@ -124,7 +126,7 @@ Sign-up: name 1–100 chars, valid email, password 8–128 chars. The same schem
 - Completed todos are visually distinct (strikethrough, muted).
 - Empty state: *"No todos yet — add one above."*
 - Footer: *"N items left"* (singular "item" for 1).
-- `src/app/todos/loading.tsx` shows a skeleton while data loads.
+- `app/todos/loading.tsx` shows a skeleton while data loads.
 
 ### 5.4 Update
 - **Toggle complete:** clicking the checkbox calls `toggleTodo`. The UI updates instantly with `useOptimistic` and rolls back if the action fails.
@@ -146,7 +148,7 @@ Sign-up: name 1–100 chars, valid email, password 8–128 chars. The same schem
 
 ## 6. Server Actions
 
-All in `src/app/todos/actions.ts` (`"use server"`).
+All in `app/todos/actions.ts` (`"use server"`).
 
 | Action            | Input                     | Effect                                                         |
 |-------------------|---------------------------|----------------------------------------------------------------|
@@ -157,7 +159,7 @@ All in `src/app/todos/actions.ts` (`"use server"`).
 | `clearCompleted`  | —                         | Delete all of the user's completed todos                       |
 
 Every action follows the same steps:
-1. **Authenticate:** `const user = await requireUser()` (from `src/lib/session.ts`; reads the session with `auth.api.getSession({ headers: await headers() })`). Throws / redirects if not logged in.
+1. **Authenticate:** `const user = await requireUser()` (from `lib/session.ts`; reads the session with `auth.api.getSession({ headers: await headers() })`). Throws / redirects if not logged in.
 2. **Validate** input with Zod. Return `{ ok: false, error }` on failure.
 3. **Authorize** by scoping every query to the user: `where: { id, userId: user.id }`. Use `updateMany` / `deleteMany` with that filter and treat `count === 0` as "not found". A user can never read or change another user's todo, even by guessing an id.
 4. **Write** with Prisma.
@@ -173,32 +175,31 @@ todo-app/
 ├── prisma/
 │   ├── schema.prisma          # Auth models (generated) + Todo
 │   └── migrations/            # Committed to git
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx         # Root layout, metadata
-│   │   ├── page.tsx           # Redirect based on session
-│   │   ├── globals.css        # @import "tailwindcss"
-│   │   ├── error.tsx          # Error boundary
-│   │   ├── (auth)/
-│   │   │   ├── login/page.tsx
-│   │   │   └── signup/page.tsx
-│   │   ├── todos/
-│   │   │   ├── page.tsx       # Server Component: session check + fetch todos
-│   │   │   ├── loading.tsx
-│   │   │   └── actions.ts     # Server Actions
-│   │   └── api/auth/[...all]/route.ts   # Better Auth handler
-│   ├── components/
-│   │   ├── auth/              # LoginForm, SignupForm, LogoutButton ("use client")
-│   │   └── todos/             # TodoForm, TodoList, TodoItem, TodoFilters, TodoFooter
-│   ├── lib/
-│   │   ├── prisma.ts          # PrismaClient singleton with PrismaPg adapter
-│   │   ├── auth.ts            # Better Auth server config (server only)
-│   │   ├── auth-client.ts     # Better Auth React client
-│   │   ├── session.ts         # getUser() / requireUser()
-│   │   ├── validation.ts      # Zod schemas
-│   │   └── types.ts           # ActionResult, Filter, etc.
-│   ├── generated/prisma/      # Prisma Client output (gitignored)
-│   └── proxy.ts               # Optional cookie-based redirects
+├── app/
+│   ├── layout.tsx             # Root layout, metadata
+│   ├── page.tsx               # Redirect based on session
+│   ├── globals.css            # @import "tailwindcss"
+│   ├── error.tsx              # Error boundary
+│   ├── (auth)/
+│   │   ├── login/page.tsx
+│   │   └── signup/page.tsx
+│   ├── todos/
+│   │   ├── page.tsx           # Server Component: session check + fetch todos
+│   │   ├── loading.tsx
+│   │   └── actions.ts         # Server Actions
+│   └── api/auth/[...all]/route.ts   # Better Auth handler
+├── components/
+│   ├── auth/                  # LoginForm, SignupForm, LogoutButton ("use client")
+│   └── todos/                 # TodoForm, TodoList, TodoItem, TodoFilters, TodoFooter
+├── lib/
+│   ├── prisma.ts              # PrismaClient singleton with PrismaPg adapter
+│   ├── auth.ts                # Better Auth server config (server only)
+│   ├── auth-client.ts         # Better Auth React client
+│   ├── session.ts             # getUser() / requireUser()
+│   ├── validation.ts          # Zod schemas
+│   └── types.ts               # ActionResult, Filter, etc.
+├── generated/prisma/          # Prisma Client output (gitignored)
+├── proxy.ts                   # Optional cookie-based redirects
 ├── tests/
 │   ├── unit/                  # validation, helpers
 │   ├── integration/           # Server Actions against a test database
@@ -234,8 +235,8 @@ BETTER_AUTH_URL="http://localhost:3000"
 ```
 
 ### 8.2 Prisma 7
-- `schema.prisma` generator: `provider = "prisma-client"`, `output = "../src/generated/prisma"`. The datasource block has `provider = "postgresql"` and **no `url`**.
-- `prisma.config.ts` at the project root: `import "dotenv/config"`, schema path, migrations path, and `datasource.url = env("DIRECT_URL")`.
+- `schema.prisma` generator: `provider = "prisma-client"`, `output = "../generated/prisma"`. The datasource block has `provider = "postgresql"` and **no `url`**.
+- `prisma.config.ts` at the project root: `import "dotenv/config"`, schema path, migrations path, and `datasource.url = process.env.DIRECT_URL`. (Prisma's `env()` helper throws when the variable is unset, which would break `prisma generate` in `postinstall` on a fresh clone or CI; `migrate` still errors clearly if the URL is missing.)
 - `lib/prisma.ts`: `new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) })`, cached on `globalThis` in development to avoid exhausting connections during hot reload.
 - Import the client from `@/generated/prisma/client`.
 
@@ -304,7 +305,7 @@ BETTER_AUTH_URL="http://localhost:3000"
 ### Local setup
 
 ```bash
-npx create-next-app@latest todo-app --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
+npx create-next-app@latest todo-app --typescript --tailwind --eslint --app --no-src-dir --import-alias "@/*"
 cd todo-app
 npm install @prisma/client @prisma/adapter-pg better-auth zod server-only
 npm install -D prisma dotenv vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/user-event @testing-library/jest-dom
