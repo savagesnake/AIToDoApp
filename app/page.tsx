@@ -1,6 +1,11 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
-// TODO(auth): redirect to /login when there's no session (SPEC.md §4).
+import { RedirectBySession } from "@/components/auth/RedirectBySession";
+
 export default function Home() {
-  redirect("/todos");
+  return (
+    <Suspense fallback={null}>
+      <RedirectBySession />
+    </Suspense>
+  );
 }

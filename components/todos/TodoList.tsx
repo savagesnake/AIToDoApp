@@ -1,18 +1,16 @@
-import { connection } from "next/server";
-
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/session";
 import { TodoItem } from "@/components/todos/TodoItem";
 
 // Server Component: queries the database directly. Rendered inside <Suspense>
-// in app/todos/page.tsx.
+// in app/todos/page.tsx, because requireUser() reads request headers.
 export async function TodoList() {
-  // With cacheComponents on, Next.js prerenders whatever it can at build time.
-  // connection() says "this needs a real request", so the query always runs
-  // fresh per request instead of being attempted (or baked in) during build.
-  await connection();
+  // Redirects to /login if there's no valid session. Reading headers() also
+  // marks this as request-time, so it's never prerendered at build time.
+  const user = await requireUser();
 
-  // TODO(auth): add `where: { userId: user.id }`.
   const todos = await prisma.todo.findMany({
+    where: { userId: user.id },
     orderBy: { createdAt: "desc" },
     select: { id: true, title: true, completed: true },
   });

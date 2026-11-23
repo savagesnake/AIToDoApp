@@ -72,8 +72,6 @@ model Todo {
 
 Add `todos Todo[]` to the generated `User` model.
 
-> **Current state (pre-auth):** until Better Auth is added, `Todo` has no `userId` / `user` relation and is indexed on `createdAt` alone. The auth step adds them with a new migration; existing dev todos must then be deleted or backfilled with an owner.
-
 ### 3.3 Validation (Zod, `lib/validation.ts`)
 
 ```ts
@@ -101,6 +99,7 @@ Sign-up: name 1–100 chars, valid email, password 8–128 chars. The same schem
 - Logged-in users visiting `/login` or `/signup` are redirected to `/todos`.
 - Logged-out users visiting `/todos` are redirected to `/login`.
 - `proxy.ts` (Next.js 16's replacement for `middleware.ts`) may do a fast **cookie-presence** redirect for UX, but it is **not** the security check. Every page and Server Action that touches user data checks the session on the server itself.
+- `proxy.ts` only redirects **cookie-less** visitors away from `/todos`. It must not redirect cookie holders away from `/login` / `/signup`: a stale cookie would loop `/login` ↔ `/todos`. Those pages do a real session check (inside `<Suspense>`) instead.
 
 ---
 
@@ -110,6 +109,7 @@ Sign-up: name 1–100 chars, valid email, password 8–128 chars. The same schem
 - **Sign up:** name, email, password. On success the user is logged in and sent to `/todos`. Duplicate email shows *"An account with this email already exists."*
 - **Log in:** email, password. Wrong credentials show one generic message: *"Email or password is incorrect."* (don't reveal which one was wrong).
 - **Log out:** button in the header on `/todos`; ends the session and redirects to `/login`.
+- All three are real `<form>`s posting to Server Actions in `app/(auth)/actions.ts`, so they work without JavaScript. With JS they show a pending state, and a failed sign-up / log-in keeps the name and email (never the password).
 - Sessions are stored in the database and last 7 days (Better Auth default), refreshed on activity.
 - Better Auth's built-in rate limiting is on for sign-in and sign-up.
 
@@ -182,7 +182,8 @@ todo-app/
 │   ├── error.tsx              # Error boundary
 │   ├── (auth)/
 │   │   ├── login/page.tsx
-│   │   └── signup/page.tsx
+│   │   ├── signup/page.tsx
+│   │   └── actions.ts         # Auth Server Actions: signUp, signIn, signOut
 │   ├── todos/
 │   │   ├── page.tsx           # Server Component: session check + fetch todos
 │   │   ├── loading.tsx
@@ -194,7 +195,6 @@ todo-app/
 ├── lib/
 │   ├── prisma.ts              # PrismaClient singleton with PrismaPg adapter
 │   ├── auth.ts                # Better Auth server config (server only)
-│   ├── auth-client.ts         # Better Auth React client
 │   ├── session.ts             # getUser() / requireUser()
 │   ├── validation.ts          # Zod schemas
 │   └── types.ts               # ActionResult, Filter, etc.
@@ -206,7 +206,7 @@ todo-app/
 │   └── e2e/                   # Playwright (optional)
 ├── prisma.config.ts
 ├── next.config.ts
-├── vitest.config.ts
+├── vitest.config.mts          # Vitest projects: unit, integration
 ├── eslint.config.mjs
 ├── .env.example               # Committed; .env is not
 └── package.json
@@ -241,9 +241,10 @@ BETTER_AUTH_URL="http://localhost:3000"
 - Import the client from `@/generated/prisma/client`.
 
 ### 8.3 Better Auth
-- `lib/auth.ts`: `betterAuth({ database: prismaAdapter(prisma, { provider: "postgresql" }), emailAndPassword: { enabled: true, minPasswordLength: 8 }, plugins: [nextCookies()] })` — `nextCookies()` must be the last plugin so Server Actions can set the session cookie.
-- `lib/auth-client.ts`: `createAuthClient()` from `better-auth/react`, used for `signUp.email`, `signIn.email`, `signOut`.
-- Generate the auth tables with the Better Auth CLI, then create a Prisma migration.
+- `lib/auth.ts`: `betterAuth({ database: prismaAdapter(prisma, { provider: "postgresql" }), emailAndPassword: { enabled: true, minPasswordLength: 8, maxPasswordLength: 128 }, plugins: [nextCookies()] })` — `nextCookies()` must be the last plugin so Server Actions can set the session cookie.
+- Auth goes through **Server Actions** (`app/(auth)/actions.ts`) calling `auth.api.signUpEmail` / `signInEmail` / `signOut` with `headers: await headers()`. There is no browser auth client. Better Auth error codes (`USER_ALREADY_EXISTS*`, `INVALID_EMAIL_OR_PASSWORD`) map to the messages in §5.1; anything else gets a generic message and is logged on the server.
+- `lib/session.ts`: `getUser()` (wrapped in React `cache()`, so one lookup per request) and `requireUser()`. They read `headers()`, so with `cacheComponents` every component that calls them renders inside `<Suspense>`.
+- Generate the auth tables with the Better Auth CLI, which is now the `auth` npm package (`@better-auth/cli` is deprecated): `npx auth generate --adapter prisma --dialect postgresql --output prisma/schema.prisma`. The CLI refuses to load a config that imports `server-only`, so run it against a temporary copy of the `lib/auth.ts` options without the database import. Then create a Prisma migration.
 
 ---
 
@@ -310,7 +311,7 @@ cd todo-app
 npm install @prisma/client @prisma/adapter-pg better-auth zod server-only
 npm install -D prisma dotenv vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/user-event @testing-library/jest-dom
 npx prisma init                      # then edit schema + prisma.config.ts per §8.2
-npx @better-auth/cli@latest generate # adds auth models to schema.prisma
+npx auth generate --adapter prisma --dialect postgresql --output prisma/schema.prisma  # adds auth models (see §8.3)
 npx prisma migrate dev --name init
 npm run dev
 ```
@@ -325,7 +326,9 @@ npm run dev
   "lint": "eslint .",
   "typecheck": "tsc --noEmit",
   "test": "vitest run",
+  "test:unit": "vitest run --project unit",
   "test:watch": "vitest",
+  "test:db:deploy": "DOTENV_CONFIG_PATH=.env.test prisma migrate deploy",
   "test:e2e": "playwright test",
   "db:migrate": "prisma migrate dev",
   "db:deploy": "prisma migrate deploy",
