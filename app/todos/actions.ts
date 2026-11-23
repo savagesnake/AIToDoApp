@@ -3,16 +3,18 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/session";
 import type { ActionResult } from "@/lib/types";
 import { todoIdSchema, todoTitleSchema } from "@/lib/validation";
 
-// Every action follows SPEC.md §6. Signature is (prevState, formData) so the
+// Every action follows SPEC.md §6: authenticate → validate → scoped query →
+// revalidate → return ActionResult. Signature is (prevState, formData) so the
 // forms can use React's useActionState to show the returned error inline.
 //
-// TODO(auth): step 1 (authenticate) and step 3 (authorize) arrive with Better
-// Auth. Each action will start with `const user = await requireUser()` and
-// every `where` gains `userId: user.id`. The queries already use
-// updateMany/deleteMany + `count === 0` so that change is a one-line filter.
+// Authorization is the `userId: user.id` in every `where`. updateMany /
+// deleteMany with that filter means another user's todo id simply matches
+// nothing (count === 0) and is reported as "not found" — never touched.
+// The userId always comes from the session, never from the form.
 
 const NOT_FOUND = "Todo not found.";
 const GENERIC_ERROR = "Something went wrong. Please try again.";
@@ -25,11 +27,13 @@ export async function createTodo(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const user = await requireUser();
+
   const title = todoTitleSchema.safeParse(formData.get("title"));
   if (!title.success) return { ok: false, error: firstIssue(title.error) };
 
   try {
-    await prisma.todo.create({ data: { title: title.data } });
+    await prisma.todo.create({ data: { title: title.data, userId: user.id } });
   } catch (error) {
     console.error("createTodo failed", error);
     return { ok: false, error: GENERIC_ERROR };
@@ -43,6 +47,8 @@ export async function updateTodo(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const user = await requireUser();
+
   const id = todoIdSchema.safeParse(formData.get("id"));
   if (!id.success) return { ok: false, error: NOT_FOUND };
   const title = todoTitleSchema.safeParse(formData.get("title"));
@@ -50,7 +56,7 @@ export async function updateTodo(
 
   try {
     const { count } = await prisma.todo.updateMany({
-      where: { id: id.data },
+      where: { id: id.data, userId: user.id },
       data: { title: title.data },
     });
     if (count === 0) return { ok: false, error: NOT_FOUND };
@@ -67,18 +73,20 @@ export async function toggleTodo(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const user = await requireUser();
+
   const id = todoIdSchema.safeParse(formData.get("id"));
   if (!id.success) return { ok: false, error: NOT_FOUND };
 
   try {
     const todo = await prisma.todo.findFirst({
-      where: { id: id.data },
+      where: { id: id.data, userId: user.id },
       select: { completed: true },
     });
     if (!todo) return { ok: false, error: NOT_FOUND };
 
     const { count } = await prisma.todo.updateMany({
-      where: { id: id.data },
+      where: { id: id.data, userId: user.id },
       data: { completed: !todo.completed },
     });
     if (count === 0) return { ok: false, error: NOT_FOUND };
@@ -95,11 +103,15 @@ export async function deleteTodo(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
+  const user = await requireUser();
+
   const id = todoIdSchema.safeParse(formData.get("id"));
   if (!id.success) return { ok: false, error: NOT_FOUND };
 
   try {
-    const { count } = await prisma.todo.deleteMany({ where: { id: id.data } });
+    const { count } = await prisma.todo.deleteMany({
+      where: { id: id.data, userId: user.id },
+    });
     if (count === 0) return { ok: false, error: NOT_FOUND };
   } catch (error) {
     console.error("deleteTodo failed", error);

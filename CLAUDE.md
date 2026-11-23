@@ -19,7 +19,9 @@ npm run dev          # Next.js dev server (http://localhost:3000)
 npm run build        # prisma generate && next build
 npm run lint         # ESLint (next lint no longer exists in Next.js 16)
 npm run typecheck    # tsc --noEmit
-npm test             # Vitest unit + integration
+npm test             # Vitest unit + integration (integration needs .env.test → Neon test branch)
+npm run test:unit    # Unit tests only, no database
+npm run test:db:deploy  # Apply migrations to the test database (.env.test)
 npm run test:e2e     # Playwright (optional)
 npm run db:migrate   # prisma migrate dev — create/apply a migration locally
 npm run db:studio    # Prisma Studio
@@ -35,10 +37,10 @@ prisma/schema.prisma        # Auth models (Better Auth CLI) + Todo
 prisma.config.ts            # Prisma 7 config: schema path, migrations, DIRECT_URL
 app/                        # Routes: (auth)/login, (auth)/signup, todos/, api/auth/[...all]
 app/todos/actions.ts        # All todo Server Actions
+app/(auth)/actions.ts       # Auth Server Actions (signUp, signIn, signOut) — no browser auth client
 components/                 # auth/ and todos/ UI components
 lib/prisma.ts               # PrismaClient singleton (PrismaPg adapter)
 lib/auth.ts                 # Better Auth server config
-lib/auth-client.ts          # Better Auth React client
 lib/session.ts              # getUser() / requireUser()
 lib/validation.ts           # Zod schemas
 generated/prisma/           # Generated Prisma Client — gitignored, never edit
@@ -51,7 +53,7 @@ proxy.ts                    # Optional cookie-presence redirects only
 - Every Server Action and protected page calls `requireUser()` (or `getUser()`) **on the server**. Never rely on `proxy.ts`, client state or hidden fields for security.
 - Every todo query is scoped to the current user: `where: { id, userId: user.id }`. Use `updateMany` / `deleteMany` with that filter and treat `count === 0` as not found.
 - Never accept a `userId` from the client.
-- Don't hand-edit core fields of the Better Auth models (`User`, `Session`, `Account`, `Verification`). Change Better Auth config and regenerate with `npx @better-auth/cli@latest generate`.
+- Don't hand-edit core fields of the Better Auth models (`User`, `Session`, `Account`, `Verification`). Change Better Auth config and regenerate with the `auth` CLI (`@better-auth/cli` is deprecated) — see SPEC.md §8.3 for the exact command and the `server-only` workaround.
 - `nextCookies()` must stay the **last** plugin in `lib/auth.ts`.
 - Login errors stay generic ("Email or password is incorrect.").
 
